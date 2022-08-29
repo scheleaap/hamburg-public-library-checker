@@ -44,7 +44,7 @@ class Notifier:
 
 class StdoutNotifier(Notifier):
     def book_is_available(self, catalog_info: CatalogInfo):
-        print(f"Book '{catalog_info.title}' is available. Go get it now!")
+        logging.info(f"Book '{catalog_info.title}' is available. Go get it now!")
 
 
 class IftttNotifier(Notifier):
