@@ -3,65 +3,85 @@ from urllib import response
 import requests
 import xml.etree.ElementTree as et
 from datetime import datetime
-from enum import Enum, unique
+from enum import Enum, auto, unique
 import logging
 from datetime import datetime, date
 
 DEFAULT_BASE_URL = "https://zones.buecherhallen.de/app_webuser/WebUserSvc.asmx"
 
+
 @unique
-class LoanStatus(Enum):
-    AVAILABLE = 0
-    ON_LOAN = 64
+class Status(Enum):
+    AVAILABLE = auto()
+    ON_LOAN = auto()
+
+    @classmethod
+    def from_code(cls, catalog_number: str, code: int):
+        # Current understanding:
+        # 0 = available
+        # 10 = on loan
+        # 11 = available (but somehow different)
+        # 16 = on loan but overdue
+        if code in [0, 11]:
+            return Status.AVAILABLE
+        elif code in [10, 16]:
+            return Status.ON_LOAN
+        else:
+            raise ValueError(f"Unknown status code {code} for book {catalog_number}")
+
 
 @dataclass
-class StockItem:
-    shelf: str
-    loan_status: LoanStatus
-    due_date: date | None
+class Copy:
+    copy_number: str
+    owner_description: str
+    current_status: Status
+    status_change_date: date | None
+    is_reserved: bool
+
 
 @dataclass
-class LibraryStock:
-    library_name: str
-    copies_in_library: int
-    stock_items: list[StockItem]
+class CatalogInfo:
+    catalog_number: str
+    title: str
+    author: str
+    year_of_publication: int
+    number_of_copies: int
 
-@dataclass
-class StockInfo:
-    libraries: list[LibraryStock]
 
 class Api:
     def __init__(self, base_url: str = DEFAULT_BASE_URL) -> None:
         self.base_url = base_url
 
-    def get_stock_info(self, item_id: str) -> StockInfo:
-        def xml_to_stock_item(xml: et.Element) -> StockItem:
-            raw_due_date = xml.find("{*}DueDate").text.strip()
-            if raw_due_date:
-                due_date = datetime.strptime(raw_due_date, r"%d/%m/%Y").date()
-            else:
-                due_date = None
-            raw_loan_status=int(xml.find("{*}IsOnLoan").text)
-            loan_status = LoanStatus(raw_loan_status)
-            return StockItem(
-                shelf=xml.find("{*}SHELF").text.strip(),
-                loan_status=loan_status,
-                due_date=due_date,
-                )
-        
-        def xml_to_library_stock(xml: et.Element) -> LibraryStock:
-            return LibraryStock(
-                library_name=xml.find("{*}Name").text.strip(),
-                copies_in_library=int(xml.find("{*}Copies").text),
-                stock_items=[xml_to_stock_item(i) for i in xml.findall("./{*}Stock/{*}Items/{*}__Element__")]
+    def get_catalog_info(self, catalog_number: str) -> tuple[CatalogInfo, list[Copy]]:
+        def xml_to_copy(xml) -> Copy:
+            raw_status = int(xml.find("{*}CurrentStatus").text)
+            status = Status.from_code(code=raw_status, catalog_number=catalog_number)
+            raw_status_change_date = xml.find("{*}StatusChangeDate").text.strip()
+            status_change_date = datetime.strptime(raw_status_change_date, r"%d/%m/%Y").date()
+            return Copy(
+                copy_number=xml.find("{*}ItemNo").text.strip(),
+                owner_description=xml.find("{*}OwnerDescription").text.strip(),
+                current_status=status,
+                status_change_date=status_change_date,
+                is_reserved=bool(int(xml.find("{*}IsReserved").text)),
             )
 
-        def xml_string_to_stock_info(xml_string) -> StockInfo:
+        def xml_string_to_catalog_info(xml_string) -> CatalogInfo:
             root = et.fromstring(response.text)
-            gssir = root.find(".//{*}GetStockStatusInfoResult")
-            return StockInfo(
-                libraries=[xml_to_library_stock(library) for library in gssir]
+            xml = root.find(".//{*}Items")
+            items = xml.findall("{*}Item")
+            return (
+                CatalogInfo(
+                    catalog_number=catalog_number,
+                    title=xml.find("{*}Title").text.strip(),
+                    author=xml.find("{*}Author").text.strip(),
+                    year_of_publication=int(xml.find("{*}YearOfPublication").text),
+                    number_of_copies=int(xml.find("{*}TotalItems").text),
+                ),
+                [xml_to_copy(item) for item in items],
             )
 
-        response = requests.get(f"{self.base_url}/GetStockStatusInfo?BacNo={item_id}&ExpandBranchInfo=1")
-        return xml_string_to_stock_info(response.text)
+        response = requests.get(
+            f"{self.base_url}/GetCatalogueItems?CatalogueNumber={catalog_number}"
+        )
+        return xml_string_to_catalog_info(response.text)

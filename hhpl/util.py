@@ -1,9 +1,10 @@
 from datetime import date
-from .api import LoanStatus
+from .api import Status
 
-def sensible_due_date(original: date, loan_status: LoanStatus) -> date | None:
+
+def sensible_due_date(original: date, status: Status) -> date | None:
     now = date.today()
-    if original and loan_status is LoanStatus.AVAILABLE:
+    if original and status is Status.AVAILABLE:
         return None
     elif original and original < now:
         return None
