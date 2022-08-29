@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 readonly basedir="$(dirname "$0")"
 cd $basedir

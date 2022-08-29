@@ -24,6 +24,7 @@ def parse_arguments(raw_args):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("catalog_number", help="The catalog number of the book")
+    parser.add_argument("--ifttt_key", help="The IFTTT key")
 
     args = parser.parse_args(raw_args)
 
@@ -90,7 +91,7 @@ def main(args):
     api = Api()
     notifiers = [
         StdoutNotifier(),
-        IftttNotifier(key="dZHnJC5lfc1wE8l6TYNUYDxEBRHuUJ8uvobc7QFP3KP"),
+        IftttNotifier(key=args.ifttt_key),
     ]
     state = State.load()
     logging.debug(f"State at startup: {state}")
