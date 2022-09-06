@@ -25,6 +25,7 @@ def parse_arguments(raw_args):
     )
     parser.add_argument("catalog_number", help="The catalog number of the book")
     parser.add_argument("--ifttt_key", help="The IFTTT key")
+    parser.add_argument("-c", "--console", action='store_true', help="Notify on the console in addition to IFTTT")
 
     args = parser.parse_args(raw_args)
 
@@ -90,9 +91,11 @@ class State:
 def main(args):
     api = Api()
     notifiers = [
-        StdoutNotifier(),
         IftttNotifier(key=args.ifttt_key),
     ]
+    if args.console:
+        notifiers.append(StdoutNotifier())
+
     state = State.load()
     logging.debug(f"State at startup: {state}")
 
